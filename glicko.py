@@ -4,10 +4,10 @@ import re
 import pickle
 import datetime
 
-def read_from_db(v, size=-1):
+def read_from_db(v, includeBots=True,size=-1):
     """Reads from the database"""
     interval = 604800000 # 7 days
-    #interval = 86400000 * 4 # 4 days
+    # interval = 86400000 * 4 # 4 days
     date1 = str(1461369600000 + interval * v)
     date2 = 1461369600000 + interval * (v + 1)
     endUnix = date2
@@ -18,12 +18,11 @@ def read_from_db(v, size=-1):
 
     conn = sqlite3.connect('games_anon.db')
     c = conn.cursor()
-    if v >= 0:
-        if size > 0:
-            size = str(size)
-            c.execute('SELECT player_white, player_black, result, notation FROM games WHERE date > ' +date1+ ' AND date < ' +date2+ ' AND size = '+size+'')
-        else:
-            c.execute('SELECT player_white, player_black, result, notation FROM games WHERE date > ' + date1 + ' AND date < ' + date2 + ' AND size > 4')
+    if size > 0:
+        size = str(size)
+        c.execute('SELECT player_white, player_black, result, notation FROM games WHERE date > ' +date1+ ' AND date < ' +date2+ ' AND size = '+size+'')
+    else:
+        c.execute('SELECT player_white, player_black, result, notation FROM games WHERE date > ' + date1 + ' AND date < ' + date2 + ' AND size > 4')
 
 
     data = c.fetchall()
@@ -35,6 +34,9 @@ def read_from_db(v, size=-1):
 
     counter = 0
     for d in data:
+        if not includeBots:
+            if d[0] in bots or d[1] in bots:
+                continue
         if d[2] == '0-0':
             pass
         elif re.match('Guest\d', d[0]) or re.match(r'Guest\d', d[1]):
@@ -45,26 +47,13 @@ def read_from_db(v, size=-1):
             pass
         else:
             goodData.append(d[0:3]) #Not the game notation
-            '''if d[0] in specialPlayers: #Checking for known alias
-                alias = specialPlayers[d[0]]
-                if alias not in activePlayers:
-                    activePlayers[alias] = [counter]
-                else:
-                    p1games = activePlayers[alias] + [counter]
-                    activePlayers[alias] = p1games '''
+
             if d[0] not in activePlayers:
                 activePlayers[d[0]] = [counter]
             else:
                 p1games = activePlayers[d[0]] + [counter]
                 activePlayers[d[0]] = p1games
 
-            ''''if d[1] in specialPlayers: #Checking for known alias
-                alias = specialPlayers[d[1]]
-                if alias not in activePlayers:
-                    activePlayers[alias] = [counter]
-                else:
-                    p1games = activePlayers[alias] + [counter]
-                    activePlayers[alias] = p1games '''
             if d[1] not in activePlayers:
                 activePlayers[d[1]] = [counter]
             else:
@@ -78,16 +67,23 @@ def read_from_db(v, size=-1):
 
 def reEvalRD():
     """Adjusting RD for activity, less active -> higher RD"""
-    c = 48 # for 7 day system
+    c = 46.5 # for 7 day system
     #c = 36.5  # for 4 day system
     for pl in playerRating:
         t = playerRating[pl][2]
         RD = playerRating[pl][1]
         playerRating[pl][1] = min((math.sqrt(RD ** 2 + c ** 2 * t)), 350)
-        if pl in activePlayers:
-            playerRating[pl][2] = 1
-        else:
+        if pl in specialPlayers:
             playerRating[pl][2] += 1
+            primary = specialPlayers[pl]
+            for al in specialSets[primary]:
+                if al in activePlayers:
+                    playerRating[pl][2] = 1
+        else:
+            if pl in activePlayers:
+                playerRating[pl][2] = 1
+            else:
+                playerRating[pl][2] += 1
 
 def gRD(RD):
     """g(RD) as defined in the Glicko Rating Method"""
@@ -95,15 +91,18 @@ def gRD(RD):
     pi = math.pi
     return 1 / math.sqrt(1 + 3 * q**2 * (RD**2)/(pi**2))
 
+
 def funcE(playerR, oppR, gRDj):
     """E as defined in the Glicko Rating Method"""
     return 1 / (1 + pow(10, (-1 * gRDj * (playerR - oppR) / 400)))
+
 
 def convertGames(pg, primaryPlayer, aliases=False):
     """Converts one players games into a usable format for the glickoMain function"""
     games = []
     for g in pg:
         twoPlayers = (playerRating[g[0]], playerRating[g[1]])
+
         if not aliases:
             if g[0] == primaryPlayer:
                 pp = 0  # White
@@ -151,6 +150,7 @@ def glickoMain(games, primaryPlayer):
     q = 0.0057565
     dSquared = 0
     rPrime = 0
+    numOfGames = len(games) + ppStats[3]
     # Where g[0] is gRD, g[1] is funcE, and g[2] is the result of the game
     for g in games:
         dSquared += ((g[0]**2) * g[1] * (1 - g[1]))
@@ -169,16 +169,20 @@ def glickoMain(games, primaryPlayer):
     if RDPrime < 20: # Minimum RD, otherwise player improvement can be buried if they have many games.
         RDPrime = 20
     #print(RDPrime)
-    newRating[primaryPlayer] = [rPrime, RDPrime, 1]
+
+    newRating[primaryPlayer] = [rPrime, RDPrime, 1, numOfGames]
 
 # Begin "Main Function" proper...
 
-fullList = False
+fullList = True
 outFile = 'out.csv'
 activePlayers = {}
 playerRating = {}
 newRating = {}
-pickle_in = open('sqlData.pickle', 'rb')
+try:
+    pickle_in = open('sqlData.pickle', 'rb')
+except FileNotFoundError:
+    pass
 #playerRating = pickle.load(pickle_in)
 
 # Global Dicts
@@ -198,15 +202,19 @@ specialSets = {'Turing': {'Turing', 'sectenor'}, 'alphatak_bot': {'alphatak_bot'
 WLD = {"1-0": '1-0', "F-0": "1-0", "R-0": "1-0",
        "0-F": '0-1', '0-R': '0-1', '0-1': '0-1', '1/2-1/2': '0.5-0.5', '0-0': '0-0'}
 
+bots = {'alphabot', 'alphatak_bot', 'TakticianBot', 'TakticianBotDev', 'ShlktBot', 'cutak_bot', 'takkybot',
+        'AlphaTakBot_5x5', 'TakkerusBot', 'BeginnerBot', 'TakticianDev'}
+
 #someGames = [["Abyss", "Turing", "0-F"], ["Turing","Abyss", "F-0"]]
 #someGames = [["ExampleHero", "Example1", "F-0"],["ExampleHero", "Example2", "0-R"],["ExampleHero", "Example3", "0-1"]]
 toRead = []
 if fullList: # All data
     tt = 1472924361 # The timestamp of the last game in the current database (Sep 3)
-    ttt = 1
+    ttt = -1
     working = 1461369600 #April 23rd
     while working < tt:
         ttt += 1
+        working += (86400 * 7)
     toRead = list(range(ttt))
 else:
     toRead = [0, 1, 2, 3, 4]
@@ -216,15 +224,23 @@ else:
 
 for groups in toRead:
     activePlayers = {}
-    gData = read_from_db(groups, size=5)
-    #print(activePlayers)
+    gData = read_from_db(groups, includeBots=False,size=-1)
     for a in activePlayers:
         if a not in playerRating:
-            playerRating[a] = [1500, 350, 1]
+            if a not in specialPlayers:
+                playerRating[a] = [1500, 350, 1, 0]
+            else:
+                mainAccount = specialPlayers[a]
+                for aliases in specialSets[mainAccount]:
+                    if aliases in playerRating:
+                        playerRating[a] = playerRating[aliases]
+                        break
+                else: # If the break wasn't hit, i.e. if there was no existing alias found in the rankings dict.
+                    playerRating[a] = [1500, 350, 1, 0]
+
+
 
     reEvalRD()
-
-    #print(len(gData))
 
     for players in activePlayers:
         someGames = []
@@ -240,12 +256,8 @@ for groups in toRead:
         else:
             for pGames in activePlayers[players]:
                 #print(pGames)
-                try:
-                    someGames.append(gData[pGames])
-                except IndexError:
-                    print("Error!")
-                    print(len(gData))
-                    print(pGames)
+                someGames.append(gData[pGames])
+
 
             newGames = convertGames(someGames, players)
             glickoMain(newGames, players)
@@ -267,9 +279,11 @@ for specP in specialPlayers: # Removing all the duplicate alias accounts before 
             del newRating[specP]
 
 with open(outFile, 'w') as f:
-    f.write('Name, Glicko, Std Dev \n')
+    f.write('Name, Glicko, Std Dev, Games \n')
     for z in newRating:
-        f.write(z + ',' + str(newRating[z][0]) + ',' + str(newRating[z][1]) + '\n')
+        gamesPlayed = int(newRating[z][3])
+        if gamesPlayed >= 10:
+            f.write(z + ',' + str(newRating[z][0]) + ',' + str(newRating[z][1]) + ',' + str(newRating[z][3]) + '\n')
 
 pickle_out = open('glickoData.pickle', 'wb')
 pickle.dump(newRating, pickle_out)
