@@ -5,10 +5,13 @@ import pickle
 import datetime
 import time
 
-def read_from_db(v, includeBots=True,size=-1):
+def read_from_db(v, Gl2=False, includeBots=True,size=-1):
     """Reads from the database"""
     #interval = 604800000 # 7 days
-    interval = 604800000 * 2
+    if Gl2:
+        interval = 604800000 * 2 # 14 days
+    else:
+        interval = 604800000 # 7 days
     # interval = 86400000 * 4 # 4 days
     date1 = str(1461369600000 + interval * v)
     date2 = 1461369600000 + interval * (v + 1)
@@ -180,10 +183,10 @@ def gl2AdjustPhi():
             phi = nr[1] / 173.7178
             sigma = nr[4]
             phiPrime = math.sqrt(phi**2 + sigma**2)
-            newRating[pl][1] = phiPrime
+            newRating[pl][1] = (phiPrime * 173.7178)
             newRating[pl][2] += 1
             counter += 1
-    print('Counter:', counter, 'L of PL', len(playerRating))
+    #print('Counter:', counter, 'L of PL', len(playerRating))
 
 def gOfPhi(p):
     """Glicko 2 function g(phi)"""
@@ -203,8 +206,7 @@ def glF(x, delta, phi, v, a, tao):
 def glicko2Main(games, primaryPlayer, aliases=False):
     UnknownBugs = {'jbustin', 'nelhage', 'Eitredes'}
     flag = False
-    v = 0
-    delta = 0
+    v, delta = 0, 0
     tao = 0.5
     mu = (playerRating[primaryPlayer][0] - 1500) / 173.7178
     phi = playerRating[primaryPlayer][1] / 173.7178
@@ -363,9 +365,9 @@ specialPlayers = {'Turing': 'Turing', 'sectenor': 'Turing',
                   'SultanPepper': 'SultanPepper', 'KingSultan': 'SultanPepper', 'PrinceSultan': 'SultanPepper',
                   'SultanTheGreat': 'SultanPepper', 'FuhrerSultan': 'SultanPepper', 'MaerSultan': 'SultanPepper',
                   'tarontos': 'Tarontos', 'Tarontos': 'Tarontos', 'Ally': 'Ally', 'Luffy': 'Ally',
-                  'Archerion': 'Archerion', 'Archerion2': 'Archerion'}
+                  'Archerion': 'Archerion', 'Archerion2': 'Archerion', 'AlphaTakBot_5x5': 'alphatak_bot'}
 
-specialSets = {'Turing': {'Turing', 'sectenor'}, 'alphatak_bot': {'alphatak_bot', 'alphabot'},
+specialSets = {'Turing': {'Turing', 'sectenor'}, 'alphatak_bot': {'alphatak_bot', 'alphabot', 'AlphaTakBot_5x5'},
                  'TakticianBot': {'TakticianBot', 'TakticianBotDev', 'TakticianDev'}, 'Tarontos': {'tarontos', 'Tarontos'},
                'SultanPepper': {'SultanPepper', 'KingSultan', 'PrinceSultan', 'SultanTheGreat', 'MaerSultan', 'FuhrerSultan'},
                'Ally': {'Ally', 'Luffy'}, 'Archerion': {'Archerion', 'Archerion2'}}
@@ -399,7 +401,7 @@ else:
 
 for groups in toRead:
     activePlayers = {}
-    gData = read_from_db(groups, includeBots=True,size=-1)
+    gData = read_from_db(groups, Glicko2=Glicko2, includeBots=True,size=-1)
     for a in activePlayers:
         if a not in playerRating:
             if a not in specialPlayers:
@@ -461,12 +463,18 @@ for specP in specialPlayers: # Removing all the duplicate alias accounts before 
             del newRating[specP]
 
 with open(outFile, 'w') as f:
-    f.write('Name, Glicko, RD, Games, Sigma \n')
-    for z in newRating:
-        gamesPlayed = int(newRating[z][3])
-        #if gamesPlayed >= 10 and int(newRating[z][2]) <= 9:
-        if gamesPlayed >= 0:
-            f.write(z + ',' + str(newRating[z][0]) + ',' + str(newRating[z][1]) + ',' + str(newRating[z][3]) + ',' + str(newRating[z][4]) + '\n')
+    if Glicko2 is False:
+        f.write('Name, Glicko, RD, Games \n')
+        for z in newRating:
+            gamesPlayed = int(newRating[z][3])
+            if gamesPlayed >= 10 and int(newRating[z][2]) <= 9:
+                f.write(z + ',' + str(newRating[z][0]) + ',' + str(newRating[z][1]) + ',' + str(newRating[z][3]) + '\n')
+    else:
+        f.write('Name, Glicko, RD, Games, Sigma \n')
+        for z in newRating:
+            gamesPlayed = int(newRating[z][3])
+            if gamesPlayed >= 10 and int(newRating[z][2]) <= 5:
+                f.write(z + ',' + str(newRating[z][0]) + ',' + str(newRating[z][1]) + ',' + str(newRating[z][3]) + ',' + str(newRating[z][4]) + '\n')
 
 pickle_out = open('glickoData.pickle', 'wb')
 pickle.dump(newRating, pickle_out)
