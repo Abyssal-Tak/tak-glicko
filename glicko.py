@@ -401,7 +401,7 @@ else:
 
 for groups in toRead:
     activePlayers = {}
-    gData = read_from_db(groups, Glicko2=Glicko2, includeBots=True,size=-1)
+    gData = read_from_db(groups, Gl2=Glicko2, includeBots=True,size=-1)
     for a in activePlayers:
         if a not in playerRating:
             if a not in specialPlayers:
