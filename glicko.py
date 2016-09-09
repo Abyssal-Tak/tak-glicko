@@ -279,10 +279,10 @@ for specP in specialPlayers: # Removing all the duplicate alias accounts before 
             del newRating[specP]
 
 with open(outFile, 'w') as f:
-    f.write('Name, Glicko, Std Dev, Games \n')
+    f.write('Name, Glicko, RD, Games \n')
     for z in newRating:
         gamesPlayed = int(newRating[z][3])
-        if gamesPlayed >= 10:
+        if gamesPlayed >= 10 and int(newRating[z][2]) <= 9:
             f.write(z + ',' + str(newRating[z][0]) + ',' + str(newRating[z][1]) + ',' + str(newRating[z][3]) + '\n')
 
 pickle_out = open('glickoData.pickle', 'wb')
