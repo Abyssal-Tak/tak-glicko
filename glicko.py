@@ -34,7 +34,7 @@ def read_from_db(v, Gl2=False, includeBots=True,size=-1):
     c.close()
     conn.close()
     goodData = []
-    badPlayers = {'FriendlyBot', 'Anon'}
+    badPlayers = {'FriendlyBot', 'Anon', 'cutak_bot'} # Do NOT remove cutak_bot from this list ever!
 
 
     counter = 0
@@ -177,7 +177,7 @@ def glickoMain(games, primaryPlayer):
 
 def gl2AdjustPhi():
     counter = 0
-    for pl in playerRating:
+    for pl in newRating:
         if pl not in activePlayers:
             nr = newRating[pl]
             phi = nr[1] / 173.7178
@@ -204,17 +204,16 @@ def glF(x, delta, phi, v, a, tao):
     return (num1/denominator1) - (x-a) / tao ** 2
 
 def glicko2Main(games, primaryPlayer, aliases=False):
-    UnknownBugs = {'jbustin', 'nelhage', 'Eitredes'}
+
     flag = False
     v, delta = 0, 0
     tao = 0.5
     mu = (playerRating[primaryPlayer][0] - 1500) / 173.7178
     phi = playerRating[primaryPlayer][1] / 173.7178
     sigma = playerRating[primaryPlayer][4]
-    if primaryPlayer in UnknownBugs:
-        print(primaryPlayer)
-        flag = True
-
+    if primaryPlayer == 'pythoner6':
+        #flag = True
+        pass
 
     for g in games:
         sResult = WLD[g[2]] # Converts result to either '1-0', '0-1', or '0.5-0.5'
@@ -260,7 +259,7 @@ def glicko2Main(games, primaryPlayer, aliases=False):
         goj = gOfPhi(oppPhi)
         E = gl2E(mu, oppMu, oppPhi)
         if flag:
-            print("E :", E, 'Result:', result)
+            print("E :", E, 'Result:', result, g[0], ': ', playerRating[g[0]], g[1], ': ', playerRating[g[1]])
         #print(result)
         v += ((goj**2) * E * (1-E))
         delta += (goj * (result - E))
@@ -269,6 +268,7 @@ def glicko2Main(games, primaryPlayer, aliases=False):
     # End big for loop
 
     v = 1 / v
+
     if flag:
         print(games)
         print(goj)
@@ -284,13 +284,11 @@ def glicko2Main(games, primaryPlayer, aliases=False):
     eplison = 0.000001 # Convergence tolerance
     if (delta ** 2) > (phi ** 2 + v):
         if flag:
-            #print("YES!")
             pass
         B = math.log((delta**2) - (phi**2) - v)
     else:
         k = 1
         if flag:
-            #print("NOPE!")
             pass
         zz = glF(A - k*tao, delta, phi, v, a, tao)
         while zz < 0:
@@ -339,8 +337,8 @@ def glicko2Main(games, primaryPlayer, aliases=False):
     gCount = playerRating[primaryPlayer][3] + len(games)
     newRating[primaryPlayer] = [rPrime, RDPrime, 1, gCount, sigmaPrime]
     if flag:
-        pass
-        #print(newRating[primaryPlayer])
+        print(newRating[primaryPlayer])
+
 
 
 
@@ -378,7 +376,7 @@ WLD = {"1-0": '1-0', "F-0": "1-0", "R-0": "1-0",
 bots = {'alphabot', 'alphatak_bot', 'TakticianBot', 'TakticianBotDev', 'ShlktBot', 'cutak_bot', 'takkybot',
         'AlphaTakBot_5x5', 'TakkerusBot', 'BeginnerBot', 'TakticianDev'}
 
-someGames = [["ExampleHero", "Example1", "F-0"],["ExampleHero", "Example2", "0-R"],["ExampleHero", "Example3", "0-1"]]
+#someGames = [["ExampleHero", "Example1", "F-0"],["ExampleHero", "Example2", "0-R"],["ExampleHero", "Example3", "0-1"]]
 #playerRating = {'ExampleHero': [1500, 200, 1, 10, 0.06], 'Example1': [1400, 30, 1, 10, 0.06],
                 #'Example2': [1550, 100, 1, 10, 0.06], 'Example3': [1700, 300, 1, 10, 0.06]}
 toRead = []
@@ -392,8 +390,8 @@ if fullList: # All data
         working += (86400 * 7)
     toRead = list(range(ttt))
 else:
-    toRead = [0, 1, 2, 3, 4]
-    #toRead = [0]
+    toRead = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    #toRead = [0, 1]
 
 #glicko2Main(someGames, 'ExampleHero')
 #print(newRating)
@@ -401,7 +399,7 @@ else:
 
 for groups in toRead:
     activePlayers = {}
-    gData = read_from_db(groups, Gl2=Glicko2, includeBots=True,size=-1)
+    gData = read_from_db(groups, Gl2=Glicko2, includeBots=False,size=-1)
     for a in activePlayers:
         if a not in playerRating:
             if a not in specialPlayers:
@@ -446,7 +444,8 @@ for groups in toRead:
 
 
 
-    playerRating = newRating
+    playerRating = newRating.copy()
+
     if Glicko2 is True:
         gl2AdjustPhi()
 
