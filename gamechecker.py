@@ -6,7 +6,7 @@ def getGames():
     conn = sqlite3.connect('games_anon.db')
     c = conn.cursor()
     date1 = '1461369600000'
-    c.execute('SELECT player_white, player_black, result, notation FROM games WHERE date > ' +date1+ ' AND size > 4')
+    c.execute('SELECT player_white, player_black, result, notation, id FROM games WHERE date > ' +date1+ ' AND size > 4')
     data = c.fetchall()
     c.close()
     conn.close()
@@ -39,14 +39,18 @@ def getGames():
 
 
     cnt = Counter(notations).most_common(25)
-    print(cnt)
+    #print(cnt)
     cnt = dict(cnt)
-    print(a)
+    #print(cnt)
+    if __name__ == "__main__":
+        print(a)
 
-    for d in data:
-        if d[3] in cnt:
-            print(d[0], d[1])
-    #print(notations)
+        for d in data:
+            if d[3] in cnt:
+                print(d[0], d[1], ':   ',  d[3][10:26], '    ', d[4])
+    else:
+        return cnt
+
 
 goodBots = {'alphabot', 'alphatak_bot', 'TakticianBot', 'TakticianBotDev',
             'ShlktBot', 'AlphaTakBot_5x5', 'TakkerusBot', 'TakticianDev'}
@@ -56,6 +60,6 @@ whiteWins = {'1-0', 'F-0', 'R-0'}
 WLD = {"1-0": '1-0', "F-0": "1-0", "R-0": "1-0",
        "0-F": '0-1', '0-R': '0-1', '0-1': '0-1', '1/2-1/2': '0.5-0.5', '0-0': '0-0'}
 
-getGames()
+#getGames()
 
 

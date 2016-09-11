@@ -4,6 +4,7 @@ import re
 import pickle
 import datetime
 import time
+import gamechecker as gc
 
 def read_from_db(v, Gl2=False, includeBots=True,size=-1):
     """Reads from the database"""
@@ -35,7 +36,22 @@ def read_from_db(v, Gl2=False, includeBots=True,size=-1):
     conn.close()
     goodData = []
     badPlayers = {'FriendlyBot', 'Anon', 'cutak_bot'} # Do NOT remove cutak_bot from this list ever!
+    try:
+        if v == 0:
+            duplicateGames = gc.getGames()
+            pickle_out = open('gcData.pickle', 'wb')
+            pickle.dump(duplicateGames, pickle_out)
+            pickle_out.close()
+        else:
+            pickle_in = open('gcData.pickle', 'rb')
+            duplicateGames = pickle.load(pickle_in)
+    except FileNotFoundError:
+        duplicateGames = gc.getGames()
+        pickle_out = open('gcData.pickle', 'wb')
+        pickle.dump(duplicateGames, pickle_out)
+        pickle_out.close()
 
+    #print(suspiciousGames)
 
     counter = 0
     for d in data:
@@ -51,6 +67,21 @@ def read_from_db(v, Gl2=False, includeBots=True,size=-1):
         elif d[0] in badPlayers or d[1] in badPlayers:
             pass
         else:
+            if d[0] in bots or d[1] in bots:
+                if d[3] in duplicateGames:
+                    if d[0] in bots:
+                        human = d[1]
+                    else:
+                        human = d[0]
+                    try:
+                        if human in duplicateGames[d[3]]:
+                            #print(duplicateGames[d[3]])
+                            continue
+                        duplicateGames[d[3]] = duplicateGames[d[3]] + [human]
+                    except TypeError:
+                        duplicateGames[d[3]] = [duplicateGames[d[3]]] + [human]
+
+
             goodData.append(d[0:3]) #Not the game notation
 
             if d[0] not in activePlayers:
@@ -207,7 +238,7 @@ def glicko2Main(games, primaryPlayer, aliases=False):
 
     flag = False
     v, delta = 0, 0
-    tao = 0.5
+    tao = 0.7
     mu = (playerRating[primaryPlayer][0] - 1500) / 173.7178
     phi = playerRating[primaryPlayer][1] / 173.7178
     sigma = playerRating[primaryPlayer][4]
@@ -350,11 +381,7 @@ outFile = 'out.csv'
 activePlayers = {}
 playerRating = {}
 newRating = {}
-try:
-    pickle_in = open('sqlData.pickle', 'rb')
-except FileNotFoundError:
-    pass
-#playerRating = pickle.load(pickle_in)
+
 
 # Global Dicts
 specialPlayers = {'Turing': 'Turing', 'sectenor': 'Turing',
@@ -399,7 +426,7 @@ else:
 
 for groups in toRead:
     activePlayers = {}
-    gData = read_from_db(groups, Gl2=Glicko2, includeBots=False,size=-1)
+    gData = read_from_db(groups, Gl2=Glicko2, includeBots=True,size=-1)
     for a in activePlayers:
         if a not in playerRating:
             if a not in specialPlayers:
@@ -475,9 +502,7 @@ with open(outFile, 'w') as f:
             if gamesPlayed >= 10 and int(newRating[z][2]) <= 5:
                 f.write(z + ',' + str(newRating[z][0]) + ',' + str(newRating[z][1]) + ',' + str(newRating[z][3]) + ',' + str(newRating[z][4]) + '\n')
 
-pickle_out = open('glickoData.pickle', 'wb')
-pickle.dump(newRating, pickle_out)
-pickle_out.close()
+
 print(time.clock())
 
 
