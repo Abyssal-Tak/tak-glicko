@@ -264,7 +264,7 @@ for groups in toRead:
 
 
 
-    playerRating = newRating
+    playerRating = newRating.copy()
 
     for specP in specialPlayers: # For all aliases
         mainAccount = specialPlayers[specP]
