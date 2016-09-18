@@ -3,10 +3,16 @@ import sqlite3
 import re
 import pickle
 import datetime
+import time
+import gamechecker as gc
 
-def read_from_db(v, includeBots=True,size=-1):
+def read_from_db(v, Gl2=False, includeBots=True,size=-1):
     """Reads from the database"""
-    interval = 604800000 # 7 days
+    #interval = 604800000 # 7 days
+    if Gl2:
+        interval = 604800000 * 2 # 14 days
+    else:
+        interval = 604800000 # 7 days
     # interval = 86400000 * 4 # 4 days
     date1 = str(1461369600000 + interval * v)
     date2 = 1461369600000 + interval * (v + 1)
@@ -29,8 +35,23 @@ def read_from_db(v, includeBots=True,size=-1):
     c.close()
     conn.close()
     goodData = []
-    badPlayers = {'FriendlyBot', 'Anon'}
+    badPlayers = {'FriendlyBot', 'Anon', 'cutak_bot'} # Do NOT remove cutak_bot from this list ever!
+    try:
+        if v == 0:
+            duplicateGames = gc.getGames()
+            pickle_out = open('gcData.pickle', 'wb')
+            pickle.dump(duplicateGames, pickle_out)
+            pickle_out.close()
+        else:
+            pickle_in = open('gcData.pickle', 'rb')
+            duplicateGames = pickle.load(pickle_in)
+    except FileNotFoundError:
+        duplicateGames = gc.getGames()
+        pickle_out = open('gcData.pickle', 'wb')
+        pickle.dump(duplicateGames, pickle_out)
+        pickle_out.close()
 
+    #print(suspiciousGames)
 
     counter = 0
     for d in data:
@@ -46,6 +67,21 @@ def read_from_db(v, includeBots=True,size=-1):
         elif d[0] in badPlayers or d[1] in badPlayers:
             pass
         else:
+            if d[0] in bots or d[1] in bots:
+                if d[3] in duplicateGames:
+                    if d[0] in bots:
+                        human = d[1]
+                    else:
+                        human = d[0]
+                    try:
+                        if human in duplicateGames[d[3]]:
+                            #print(duplicateGames[d[3]])
+                            continue
+                        duplicateGames[d[3]] = duplicateGames[d[3]] + [human]
+                    except TypeError:
+                        duplicateGames[d[3]] = [duplicateGames[d[3]]] + [human]
+
+
             goodData.append(d[0:3]) #Not the game notation
 
             if d[0] not in activePlayers:
@@ -64,6 +100,7 @@ def read_from_db(v, includeBots=True,size=-1):
 
     return goodData
 
+# Glicko 1 Functions
 
 def reEvalRD():
     """Adjusting RD for activity, less active -> higher RD"""
@@ -119,11 +156,6 @@ def convertGames(pg, primaryPlayer, aliases=False):
                 pp = 1
 
         result = WLD[g[2]]
-        if result == '0-0':
-            print("SQL-related bug")
-            continue
-        #print(result)
-
         if result == '1-0':
             if pp == 0:
                 result = 1
@@ -172,30 +204,199 @@ def glickoMain(games, primaryPlayer):
 
     newRating[primaryPlayer] = [rPrime, RDPrime, 1, numOfGames]
 
+# End Glicko 1 functions
+
+def gl2AdjustPhi():
+    counter = 0
+    for pl in newRating:
+        if pl not in activePlayers:
+            nr = newRating[pl]
+            phi = nr[1] / 173.7178
+            sigma = nr[4]
+            phiPrime = math.sqrt(phi**2 + sigma**2)
+            newRating[pl][1] = (phiPrime * 173.7178)
+            newRating[pl][2] += 1
+            counter += 1
+    #print('Counter:', counter, 'L of PL', len(playerRating))
+
+def gOfPhi(p):
+    """Glicko 2 function g(phi)"""
+    return 1 / math.sqrt(1 + 3 * p **2 / math.pi **2)
+
+def gl2E(m, oppM, oppP):
+    goj = gOfPhi(oppP)
+    return 1 / (1 + math.exp(-1*goj * (m - oppM)))
+
+
+def glF(x, delta, phi, v, a, tao):
+    ex = math.exp(x)
+    num1 = ex * (delta ** 2 - phi ** 2 - v - ex) # Numerator of first fraction
+    denominator1 = 2 * (phi ** 2 + v + ex) ** 2
+    return (num1/denominator1) - (x-a) / tao ** 2
+
+def glicko2Main(games, primaryPlayer, aliases=False):
+    try:
+        flag = False
+        v, delta = 0, 0
+        tao = 0.7
+        mu = (playerRating[primaryPlayer][0] - 1500) / 173.7178
+        phi = playerRating[primaryPlayer][1] / 173.7178
+        sigma = playerRating[primaryPlayer][4]
+        if primaryPlayer == 'pythoner6':
+            #flag = True
+            pass
+
+        for g in games:
+            sResult = WLD[g[2]] # Converts result to either '1-0', '0-1', or '0.5-0.5'
+            if not aliases:
+                if g[0] == primaryPlayer:
+                    oppMu = (playerRating[g[1]][0] - 1500) / 173.7178
+                    oppPhi = playerRating[g[1]][1] / 173.7178
+                    if sResult == '1-0':
+                        result = 1
+                    elif sResult == '0-1':
+                        result = 0
+                    else:
+                        result = 0.5
+                else:
+                    oppMu = (playerRating[g[0]][0] - 1500) / 173.7178
+                    oppPhi = playerRating[g[0]][1] / 173.7178
+                    if sResult == '1-0':
+                        result = 0
+                    elif sResult == '0-1':
+                        result = 1
+                    else:
+                        result = 0.5
+            else:
+                if g[0] in specialSets[primaryPlayer]:
+                    oppMu = (playerRating[g[1]][0] - 1500) / 173.7178
+                    oppPhi = playerRating[g[1]][1] / 173.7178
+                    if sResult == '1-0':
+                        result = 1
+                    elif sResult == '0-1':
+                        result = 0
+                    else:
+                        result = 0.5
+                else:
+                    oppMu = (playerRating[g[0]][0] - 1500) / 173.7178
+                    oppPhi = playerRating[g[0]][1] / 173.7178
+                    if sResult == '1-0':
+                        result = 0
+                    elif sResult == '0-1':
+                        result = 1
+                    else:
+                        result = 0.5
+
+            goj = gOfPhi(oppPhi)
+            E = gl2E(mu, oppMu, oppPhi)
+            if flag:
+                print("E :", E, 'Result:', result, g[0], ': ', playerRating[g[0]], g[1], ': ', playerRating[g[1]])
+            #print(result)
+            v += ((goj**2) * E * (1-E))
+            delta += (goj * (result - E))
+
+
+        # End big for loop
+
+        v = 1 / v
+
+        if flag:
+            print(games)
+            print(goj)
+            print(E)
+            print(v)
+            print(delta)
+        #print(v)
+        muPrime = delta #The first part calculating muPrime == ... delta, hence this time-saving measure.
+        delta *= v
+        #print(delta)
+        a = math.log(sigma**2)
+        A = a
+        eplison = 0.000001 # Convergence tolerance
+        if (delta ** 2) > (phi ** 2 + v):
+            if flag:
+                pass
+            B = math.log((delta**2) - (phi**2) - v)
+        else:
+            k = 1
+            if flag:
+                pass
+            zz = glF(A - k*tao, delta, phi, v, a, tao)
+            while zz < 0:
+                k += 1
+                #print(k)
+                zz = glF(A - k * tao, delta, phi, v, a, tao)
+            B = A - k * tao
+
+        fa = glF(A, delta, phi, v, a, tao)
+        fb = glF(B, delta, phi, v, a, tao)
+        counter = 0
+        while math.fabs(B - A) > eplison:
+            C = A + ((A - B)*fa) / (fb - fa)
+            fc = glF(C, delta, phi, v, a, tao)
+            if (fc * fb) < 0:
+                A = B
+                fa = fb
+            else:
+                fa /= 2
+            B = C
+            fb = fc
+            if flag:
+                counter += 1
+        if flag:
+            pass
+            #print('A,B:', A, B)
+        sigmaPrime = math.exp(A/2)
+        if flag:
+            pass
+            #print('sigmaPrime:', sigmaPrime)
+        phiStar = math.sqrt(phi**2 + sigmaPrime**2)
+        if flag:
+            pass
+            #print('phiStar', phiStar)
+        phiPrime = 1 / math.sqrt((1/phiStar**2)+(1/v))
+        if flag:
+            pass
+            #print('phiPrime:', phiPrime)
+        muPrime *= (phiPrime**2)
+        muPrime += mu
+        if flag:
+            pass
+            #print(sigmaPrime, phiStar, phiPrime, muPrime)
+        rPrime = 173.7178 * muPrime + 1500
+        RDPrime = 173.7178 * phiPrime
+        gCount = playerRating[primaryPlayer][3] + len(games)
+        newRating[primaryPlayer] = [rPrime, RDPrime, 1, gCount, sigmaPrime]
+        if flag:
+            print(newRating[primaryPlayer])
+    except ZeroDivisionError:
+        print("Error calculating the rating of: ", primaryPlayer)
+        newRating[primaryPlayer] = playerRating[primaryPlayer]
+
+
+
+
 # Begin "Main Function" proper...
 
 fullList = True
+Glicko2 = False
 outFile = 'out.csv'
 activePlayers = {}
 playerRating = {}
 newRating = {}
-try:
-    pickle_in = open('sqlData.pickle', 'rb')
-except FileNotFoundError:
-    pass
-#playerRating = pickle.load(pickle_in)
+
 
 # Global Dicts
 specialPlayers = {'Turing': 'Turing', 'sectenor': 'Turing',
                   'alphabot': 'alphatak_bot', 'alphatak_bot': 'alphatak_bot',
-                  'TakticianBot': 'TakticianBot', 'TakticianBotDev': 'TakticianBot',
+                  'TakticianBot': 'TakticianBot', 'TakticianBotDev': 'TakticianBot', 'TakticianDev': 'TakticianBot',
                   'SultanPepper': 'SultanPepper', 'KingSultan': 'SultanPepper', 'PrinceSultan': 'SultanPepper',
                   'SultanTheGreat': 'SultanPepper', 'FuhrerSultan': 'SultanPepper', 'MaerSultan': 'SultanPepper',
                   'tarontos': 'Tarontos', 'Tarontos': 'Tarontos', 'Ally': 'Ally', 'Luffy': 'Ally',
-                  'Archerion': 'Archerion', 'Archerion2': 'Archerion'}
+                  'Archerion': 'Archerion', 'Archerion2': 'Archerion', 'AlphaTakBot_5x5': 'alphatak_bot'}
 
-specialSets = {'Turing': {'Turing', 'sectenor'}, 'alphatak_bot': {'alphatak_bot', 'alphabot'},
-                 'TakticianBot': {'TakticianBot', 'TakticianBotDev'}, 'Tarontos': {'tarontos', 'Tarontos'},
+specialSets = {'Turing': {'Turing', 'sectenor'}, 'alphatak_bot': {'alphatak_bot', 'alphabot', 'AlphaTakBot_5x5'},
+                 'TakticianBot': {'TakticianBot', 'TakticianBotDev', 'TakticianDev'}, 'Tarontos': {'tarontos', 'Tarontos'},
                'SultanPepper': {'SultanPepper', 'KingSultan', 'PrinceSultan', 'SultanTheGreat', 'MaerSultan', 'FuhrerSultan'},
                'Ally': {'Ally', 'Luffy'}, 'Archerion': {'Archerion', 'Archerion2'}}
 
@@ -205,9 +406,11 @@ WLD = {"1-0": '1-0', "F-0": "1-0", "R-0": "1-0",
 bots = {'alphabot', 'alphatak_bot', 'TakticianBot', 'TakticianBotDev', 'ShlktBot', 'cutak_bot', 'takkybot',
         'AlphaTakBot_5x5', 'TakkerusBot', 'BeginnerBot', 'TakticianDev'}
 
-#someGames = [["Abyss", "Turing", "0-F"], ["Turing","Abyss", "F-0"]]
 #someGames = [["ExampleHero", "Example1", "F-0"],["ExampleHero", "Example2", "0-R"],["ExampleHero", "Example3", "0-1"]]
+#playerRating = {'ExampleHero': [1500, 200, 1, 10, 0.06], 'Example1': [1400, 30, 1, 10, 0.06],
+                #'Example2': [1550, 100, 1, 10, 0.06], 'Example3': [1700, 300, 1, 10, 0.06]}
 toRead = []
+time.clock()
 if fullList: # All data
     tt = 1472924361 # The timestamp of the last game in the current database (Sep 3)
     ttt = -1
@@ -217,18 +420,20 @@ if fullList: # All data
         working += (86400 * 7)
     toRead = list(range(ttt))
 else:
-    toRead = [0, 1, 2, 3, 4]
-    #toRead = [0]
+    toRead = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    #toRead = [0, 1]
 
+#glicko2Main(someGames, 'ExampleHero')
+#print(newRating)
 
 
 for groups in toRead:
     activePlayers = {}
-    gData = read_from_db(groups, includeBots=False,size=-1)
+    gData = read_from_db(groups, Gl2=Glicko2, includeBots=False,size=-1)
     for a in activePlayers:
         if a not in playerRating:
             if a not in specialPlayers:
-                playerRating[a] = [1500, 350, 1, 0]
+                playerRating[a] = [1500, 350, 1, 0, 0.06]
             else:
                 mainAccount = specialPlayers[a]
                 for aliases in specialSets[mainAccount]:
@@ -236,11 +441,11 @@ for groups in toRead:
                         playerRating[a] = playerRating[aliases]
                         break
                 else: # If the break wasn't hit, i.e. if there was no existing alias found in the rankings dict.
-                    playerRating[a] = [1500, 350, 1, 0]
+                    playerRating[a] = [1500, 350, 1, 0, 0.06]
 
 
-
-    reEvalRD()
+    if Glicko2 is False:
+        reEvalRD()
 
     for players in activePlayers:
         someGames = []
@@ -251,20 +456,29 @@ for groups in toRead:
                     if alts in activePlayers: # If this alias played any games in the period
                         for pGames in activePlayers[alts]:
                             someGames.append(gData[pGames])
-                newGames = convertGames(someGames, players, aliases=True)
-                glickoMain(newGames, players)
+                if Glicko2 is False:
+                    newGames = convertGames(someGames, players, aliases=True)
+                    glickoMain(newGames, players)
+                else:
+                    glicko2Main(someGames, players, aliases=True)
         else:
             for pGames in activePlayers[players]:
                 #print(pGames)
                 someGames.append(gData[pGames])
 
-
-            newGames = convertGames(someGames, players)
-            glickoMain(newGames, players)
+            if Glicko2 is False:
+                newGames = convertGames(someGames, players)
+                glickoMain(newGames, players)
+            else:
+                glicko2Main(someGames, players)
 
 
 
     playerRating = newRating.copy()
+
+    if Glicko2 is True:
+        gl2AdjustPhi()
+
 
     for specP in specialPlayers: # For all aliases
         mainAccount = specialPlayers[specP]
@@ -279,14 +493,20 @@ for specP in specialPlayers: # Removing all the duplicate alias accounts before 
             del newRating[specP]
 
 with open(outFile, 'w') as f:
-    f.write('Name, Glicko, RD, Games \n')
-    for z in newRating:
-        gamesPlayed = int(newRating[z][3])
-        if gamesPlayed >= 10 and int(newRating[z][2]) <= 9:
-            f.write(z + ',' + str(newRating[z][0]) + ',' + str(newRating[z][1]) + ',' + str(newRating[z][3]) + '\n')
+    if Glicko2 is False:
+        f.write('Name, Glicko, RD, Games \n')
+        for z in newRating:
+            gamesPlayed = int(newRating[z][3])
+            if gamesPlayed >= 10 and int(newRating[z][2]) <= 9:
+                f.write(z + ',' + str(newRating[z][0]) + ',' + str(newRating[z][1]) + ',' + str(newRating[z][3]) + '\n')
+    else:
+        f.write('Name, Glicko, RD, Games, Sigma \n')
+        for z in newRating:
+            gamesPlayed = int(newRating[z][3])
+            if gamesPlayed >= 10 and int(newRating[z][2]) <= 5:
+                f.write(z + ',' + str(newRating[z][0]) + ',' + str(newRating[z][1]) + ',' + str(newRating[z][3]) + ',' + str(newRating[z][4]) + '\n')
 
-pickle_out = open('glickoData.pickle', 'wb')
-pickle.dump(newRating, pickle_out)
-pickle_out.close()
+
+print(time.clock())
 
 
