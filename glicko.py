@@ -235,148 +235,151 @@ def glF(x, delta, phi, v, a, tao):
     return (num1/denominator1) - (x-a) / tao ** 2
 
 def glicko2Main(games, primaryPlayer, aliases=False):
+    try:
+        flag = False
+        v, delta = 0, 0
+        tao = 0.7
+        mu = (playerRating[primaryPlayer][0] - 1500) / 173.7178
+        phi = playerRating[primaryPlayer][1] / 173.7178
+        sigma = playerRating[primaryPlayer][4]
+        if primaryPlayer == 'pythoner6':
+            #flag = True
+            pass
 
-    flag = False
-    v, delta = 0, 0
-    tao = 0.7
-    mu = (playerRating[primaryPlayer][0] - 1500) / 173.7178
-    phi = playerRating[primaryPlayer][1] / 173.7178
-    sigma = playerRating[primaryPlayer][4]
-    if primaryPlayer == 'pythoner6':
-        #flag = True
-        pass
-
-    for g in games:
-        sResult = WLD[g[2]] # Converts result to either '1-0', '0-1', or '0.5-0.5'
-        if not aliases:
-            if g[0] == primaryPlayer:
-                oppMu = (playerRating[g[1]][0] - 1500) / 173.7178
-                oppPhi = playerRating[g[1]][1] / 173.7178
-                if sResult == '1-0':
-                    result = 1
-                elif sResult == '0-1':
-                    result = 0
+        for g in games:
+            sResult = WLD[g[2]] # Converts result to either '1-0', '0-1', or '0.5-0.5'
+            if not aliases:
+                if g[0] == primaryPlayer:
+                    oppMu = (playerRating[g[1]][0] - 1500) / 173.7178
+                    oppPhi = playerRating[g[1]][1] / 173.7178
+                    if sResult == '1-0':
+                        result = 1
+                    elif sResult == '0-1':
+                        result = 0
+                    else:
+                        result = 0.5
                 else:
-                    result = 0.5
+                    oppMu = (playerRating[g[0]][0] - 1500) / 173.7178
+                    oppPhi = playerRating[g[0]][1] / 173.7178
+                    if sResult == '1-0':
+                        result = 0
+                    elif sResult == '0-1':
+                        result = 1
+                    else:
+                        result = 0.5
             else:
-                oppMu = (playerRating[g[0]][0] - 1500) / 173.7178
-                oppPhi = playerRating[g[0]][1] / 173.7178
-                if sResult == '1-0':
-                    result = 0
-                elif sResult == '0-1':
-                    result = 1
+                if g[0] in specialSets[primaryPlayer]:
+                    oppMu = (playerRating[g[1]][0] - 1500) / 173.7178
+                    oppPhi = playerRating[g[1]][1] / 173.7178
+                    if sResult == '1-0':
+                        result = 1
+                    elif sResult == '0-1':
+                        result = 0
+                    else:
+                        result = 0.5
                 else:
-                    result = 0.5
-        else:
-            if g[0] in specialSets[primaryPlayer]:
-                oppMu = (playerRating[g[1]][0] - 1500) / 173.7178
-                oppPhi = playerRating[g[1]][1] / 173.7178
-                if sResult == '1-0':
-                    result = 1
-                elif sResult == '0-1':
-                    result = 0
-                else:
-                    result = 0.5
-            else:
-                oppMu = (playerRating[g[0]][0] - 1500) / 173.7178
-                oppPhi = playerRating[g[0]][1] / 173.7178
-                if sResult == '1-0':
-                    result = 0
-                elif sResult == '0-1':
-                    result = 1
-                else:
-                    result = 0.5
+                    oppMu = (playerRating[g[0]][0] - 1500) / 173.7178
+                    oppPhi = playerRating[g[0]][1] / 173.7178
+                    if sResult == '1-0':
+                        result = 0
+                    elif sResult == '0-1':
+                        result = 1
+                    else:
+                        result = 0.5
 
-        goj = gOfPhi(oppPhi)
-        E = gl2E(mu, oppMu, oppPhi)
+            goj = gOfPhi(oppPhi)
+            E = gl2E(mu, oppMu, oppPhi)
+            if flag:
+                print("E :", E, 'Result:', result, g[0], ': ', playerRating[g[0]], g[1], ': ', playerRating[g[1]])
+            #print(result)
+            v += ((goj**2) * E * (1-E))
+            delta += (goj * (result - E))
+
+
+        # End big for loop
+
+        v = 1 / v
+
         if flag:
-            print("E :", E, 'Result:', result, g[0], ': ', playerRating[g[0]], g[1], ': ', playerRating[g[1]])
-        #print(result)
-        v += ((goj**2) * E * (1-E))
-        delta += (goj * (result - E))
+            print(games)
+            print(goj)
+            print(E)
+            print(v)
+            print(delta)
+        #print(v)
+        muPrime = delta #The first part calculating muPrime == ... delta, hence this time-saving measure.
+        delta *= v
+        #print(delta)
+        a = math.log(sigma**2)
+        A = a
+        eplison = 0.000001 # Convergence tolerance
+        if (delta ** 2) > (phi ** 2 + v):
+            if flag:
+                pass
+            B = math.log((delta**2) - (phi**2) - v)
+        else:
+            k = 1
+            if flag:
+                pass
+            zz = glF(A - k*tao, delta, phi, v, a, tao)
+            while zz < 0:
+                k += 1
+                #print(k)
+                zz = glF(A - k * tao, delta, phi, v, a, tao)
+            B = A - k * tao
 
-
-    # End big for loop
-
-    v = 1 / v
-
-    if flag:
-        print(games)
-        print(goj)
-        print(E)
-        print(v)
-        print(delta)
-    #print(v)
-    muPrime = delta #The first part calculating muPrime == ... delta, hence this time-saving measure.
-    delta *= v
-    #print(delta)
-    a = math.log(sigma**2)
-    A = a
-    eplison = 0.000001 # Convergence tolerance
-    if (delta ** 2) > (phi ** 2 + v):
+        fa = glF(A, delta, phi, v, a, tao)
+        fb = glF(B, delta, phi, v, a, tao)
+        counter = 0
+        while math.fabs(B - A) > eplison:
+            C = A + ((A - B)*fa) / (fb - fa)
+            fc = glF(C, delta, phi, v, a, tao)
+            if (fc * fb) < 0:
+                A = B
+                fa = fb
+            else:
+                fa /= 2
+            B = C
+            fb = fc
+            if flag:
+                counter += 1
         if flag:
             pass
-        B = math.log((delta**2) - (phi**2) - v)
-    else:
-        k = 1
+            #print('A,B:', A, B)
+        sigmaPrime = math.exp(A/2)
         if flag:
             pass
-        zz = glF(A - k*tao, delta, phi, v, a, tao)
-        while zz < 0:
-            k += 1
-            #print(k)
-            zz = glF(A - k * tao, delta, phi, v, a, tao)
-        B = A - k * tao
-
-    fa = glF(A, delta, phi, v, a, tao)
-    fb = glF(B, delta, phi, v, a, tao)
-    counter = 0
-    while math.fabs(B - A) > eplison:
-        C = A + ((A - B)*fa) / (fb - fa)
-        fc = glF(C, delta, phi, v, a, tao)
-        if (fc * fb) < 0:
-            A = B
-            fa = fb
-        else:
-            fa /= 2
-        B = C
-        fb = fc
+            #print('sigmaPrime:', sigmaPrime)
+        phiStar = math.sqrt(phi**2 + sigmaPrime**2)
         if flag:
-            counter += 1
-    if flag:
-        pass
-        #print('A,B:', A, B)
-    sigmaPrime = math.exp(A/2)
-    if flag:
-        pass
-        #print('sigmaPrime:', sigmaPrime)
-    phiStar = math.sqrt(phi**2 + sigmaPrime**2)
-    if flag:
-        pass
-        #print('phiStar', phiStar)
-    phiPrime = 1 / math.sqrt((1/phiStar**2)+(1/v))
-    if flag:
-        pass
-        #print('phiPrime:', phiPrime)
-    muPrime *= (phiPrime**2)
-    muPrime += mu
-    if flag:
-        pass
-        #print(sigmaPrime, phiStar, phiPrime, muPrime)
-    rPrime = 173.7178 * muPrime + 1500
-    RDPrime = 173.7178 * phiPrime
-    gCount = playerRating[primaryPlayer][3] + len(games)
-    newRating[primaryPlayer] = [rPrime, RDPrime, 1, gCount, sigmaPrime]
-    if flag:
-        print(newRating[primaryPlayer])
+            pass
+            #print('phiStar', phiStar)
+        phiPrime = 1 / math.sqrt((1/phiStar**2)+(1/v))
+        if flag:
+            pass
+            #print('phiPrime:', phiPrime)
+        muPrime *= (phiPrime**2)
+        muPrime += mu
+        if flag:
+            pass
+            #print(sigmaPrime, phiStar, phiPrime, muPrime)
+        rPrime = 173.7178 * muPrime + 1500
+        RDPrime = 173.7178 * phiPrime
+        gCount = playerRating[primaryPlayer][3] + len(games)
+        newRating[primaryPlayer] = [rPrime, RDPrime, 1, gCount, sigmaPrime]
+        if flag:
+            print(newRating[primaryPlayer])
+    except ZeroDivisionError:
+        print("Error calculating the rating of: ", primaryPlayer)
+        newRating[primaryPlayer] = playerRating[primaryPlayer]
 
 
 
 
 # Begin "Main Function" proper...
 
-fullList = False
-Glicko2 = True
+fullList = True
+Glicko2 = False
 outFile = 'out.csv'
 activePlayers = {}
 playerRating = {}
@@ -426,7 +429,7 @@ else:
 
 for groups in toRead:
     activePlayers = {}
-    gData = read_from_db(groups, Gl2=Glicko2, includeBots=True,size=-1)
+    gData = read_from_db(groups, Gl2=Glicko2, includeBots=False,size=-1)
     for a in activePlayers:
         if a not in playerRating:
             if a not in specialPlayers:
