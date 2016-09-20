@@ -1,7 +1,6 @@
 import math
 import sqlite3
 import re
-import pickle
 import datetime
 import time
 import gamechecker as gc
@@ -26,9 +25,9 @@ def read_from_db(v, Gl2=False, includeBots=True,size=-1):
     c = conn.cursor()
     if size > 0:
         size = str(size)
-        c.execute('SELECT player_white, player_black, result, notation FROM games WHERE date > ' +date1+ ' AND date < ' +date2+ ' AND size = '+size+'')
+        c.execute('SELECT player_white, player_black, result, notation, timertime FROM games WHERE date > ' +date1+ ' AND date < ' +date2+ ' AND size = '+size+'')
     else:
-        c.execute('SELECT player_white, player_black, result, notation FROM games WHERE date > ' + date1 + ' AND date < ' + date2 + ' AND size > 4')
+        c.execute('SELECT player_white, player_black, result, notation, timertime FROM games WHERE date > ' + date1 + ' AND date < ' + date2 + ' AND size > 4')
 
 
     data = c.fetchall()
@@ -36,25 +35,16 @@ def read_from_db(v, Gl2=False, includeBots=True,size=-1):
     conn.close()
     goodData = []
     badPlayers = {'FriendlyBot', 'Anon', 'cutak_bot'} # Do NOT remove cutak_bot from this list ever!
-    try:
-        if v == 0:
-            duplicateGames = gc.getGames()
-            pickle_out = open('gcData.pickle', 'wb')
-            pickle.dump(duplicateGames, pickle_out)
-            pickle_out.close()
-        else:
-            pickle_in = open('gcData.pickle', 'rb')
-            duplicateGames = pickle.load(pickle_in)
-    except FileNotFoundError:
-        duplicateGames = gc.getGames()
-        pickle_out = open('gcData.pickle', 'wb')
-        pickle.dump(duplicateGames, pickle_out)
-        pickle_out.close()
 
-    #print(suspiciousGames)
+
 
     counter = 0
     for d in data:
+        if d[4] == 0: # If the data predates recording the time control
+            pass
+        elif int(d[4]) < 300: # If the game timer was less than 5 minutes, I ignore the data
+            continue
+
         if not includeBots:
             if d[0] in bots or d[1] in bots:
                 continue
@@ -380,6 +370,7 @@ def glicko2Main(games, primaryPlayer, aliases=False):
 
 fullList = True
 Glicko2 = False
+interval = 86400 * 7 # 7 days
 outFile = 'out.csv'
 activePlayers = {}
 playerRating = {}
@@ -409,20 +400,24 @@ bots = {'alphabot', 'alphatak_bot', 'TakticianBot', 'TakticianBotDev', 'ShlktBot
 #someGames = [["ExampleHero", "Example1", "F-0"],["ExampleHero", "Example2", "0-R"],["ExampleHero", "Example3", "0-1"]]
 #playerRating = {'ExampleHero': [1500, 200, 1, 10, 0.06], 'Example1': [1400, 30, 1, 10, 0.06],
                 #'Example2': [1550, 100, 1, 10, 0.06], 'Example3': [1700, 300, 1, 10, 0.06]}
-toRead = []
+
 time.clock()
+duplicateGames, lastUnix = gc.getGames()
+lastUnix /= 1000
+lastUnix = int(lastUnix)
+
 if fullList: # All data
-    tt = 1472924361 # The timestamp of the last game in the current database (Sep 3)
-    ttt = -1
+    ttt = 0
     working = 1461369600 #April 23rd
-    while working < tt:
+    while working + interval <= lastUnix:
         ttt += 1
-        working += (86400 * 7)
+        working += interval
     toRead = list(range(ttt))
 else:
-    toRead = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    #toRead = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    toRead = list(range(21))
     #toRead = [0, 1]
-
+print(toRead)
 #glicko2Main(someGames, 'ExampleHero')
 #print(newRating)
 
@@ -506,7 +501,4 @@ with open(outFile, 'w') as f:
             if gamesPlayed >= 10 and int(newRating[z][2]) <= 5:
                 f.write(z + ',' + str(newRating[z][0]) + ',' + str(newRating[z][1]) + ',' + str(newRating[z][3]) + ',' + str(newRating[z][4]) + '\n')
 
-
 print(time.clock())
-
-

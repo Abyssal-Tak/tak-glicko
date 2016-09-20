@@ -6,7 +6,7 @@ def getGames():
     conn = sqlite3.connect('games_anon.db')
     c = conn.cursor()
     date1 = '1461369600000'
-    c.execute('SELECT player_white, player_black, result, notation, id FROM games WHERE date > ' +date1+ ' AND size > 4')
+    c.execute('SELECT player_white, player_black, result, notation, date FROM games WHERE date > ' +date1+ ' AND size > 4')
     data = c.fetchall()
     c.close()
     conn.close()
@@ -14,9 +14,14 @@ def getGames():
     notations = []
     badPlayers = {'FriendlyBot', 'Anon'}
     a = 0
+    counter = 1
+    lastUnix = 0
     players = []
 
     for d in data:
+        if counter == len(data):
+            lastUnix = d[4]
+        counter += 1
         if d[2] == '0-0':
             pass
         elif len(d[3]) <= 4:
@@ -47,9 +52,9 @@ def getGames():
 
         for d in data:
             if d[3] in cnt:
-                print(d[0], d[1], ':   ',  d[3][10:26], '    ', d[4])
+                print(d[0], d[1], ':   ',  d[3][10:26])
     else:
-        return cnt
+        return cnt, lastUnix
 
 
 goodBots = {'alphabot', 'alphatak_bot', 'TakticianBot', 'TakticianBotDev',
